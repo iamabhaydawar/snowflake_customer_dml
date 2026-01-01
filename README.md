@@ -1,223 +1,133 @@
-# Customer Data DML - Data Model Loading Worksheet
+# Customer Data DML - Snowflake Data Model Loading Worksheet
 
-## 📋 Overview
+## Overview
 
-This repository contains SQL DML (Data Manipulation Language) commands and data files for loading customer data into a Snowflake data warehouse. The repository is designed to support batch ingestion of customer dimension data with proper data quality checks and validation.
+This repository contains SQL scripts and data files for loading customer data into Snowflake. It is a dedicated project for customer data ingestion and dimensional modeling in Snowflake, focusing on creating and populating the customer dimension table.
 
-## 🎯 Purpose
+## Project Description
 
-- Load customer data from CSV files into Snowflake `customer_dim` table
-- Perform data quality checks and validation
-- Support batch ingestion workflows for customer dimension data
+This project provides a complete workflow for:
+- Creating the necessary Snowflake database and schema structure
+- Defining the customer dimension table schema
+- Loading customer data from CSV files into Snowflake
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 customer-data-dml/
-├── README.md                      # This file
-├── customer_data_dml.sql          # SQL DML commands for loading customer data
-└── customer_10k_good_data.csv    # Sample customer data file (10,000 records)
+├── README.md                      # Project documentation
+├── steps.sql                      # Snowflake DDL and setup scripts
+└── customer_10k_good_data.csv     # Customer data file (10,000 records)
 ```
 
-## 🚀 Getting Started with Snowflake
+## Prerequisites
 
-### Prerequisites
+- Snowflake account with appropriate privileges
+- Access to create databases, schemas, and tables
+- SnowSQL or Snowflake Web UI for executing SQL commands
 
-1. **Snowflake Account**: You need access to a Snowflake account
-2. **SnowSQL or Snowflake Web UI**: For executing SQL commands
-3. **Database Setup**: The `car_rental` database and `customer_dim` table should already exist
+## Getting Started
 
-### Step 1: Connect to Snowflake
+### Step 1: Execute Setup Script
 
-#### Using SnowSQL (Command Line)
-```bash
-snowsql -a <account_identifier> -u <username> -d car_rental
-```
+Run the `steps.sql` file in your Snowflake environment. This script will:
 
-#### Using Snowflake Web UI
-1. Navigate to your Snowflake account URL
-2. Log in with your credentials
-3. Select the `car_rental` database
+1. Create the `gds_dev` database
+2. Create the `dims` schema
+3. Create the `dims.customers` table with the following structure:
+   - `customer_pk` (NUMBER) - Primary key
+   - `salutation` (VARCHAR)
+   - `first_name` (VARCHAR)
+   - `last_name` (VARCHAR)
+   - `gender` (VARCHAR)
+   - `marital_status` (VARCHAR)
+   - `day_of_birth` (DATE)
+   - `birth_country` (VARCHAR)
+   - `email_address` (VARCHAR)
+   - `city_name` (VARCHAR)
+   - `zip_code` (VARCHAR)
+   - `country_name` (VARCHAR)
+   - `gmt_timezone_offset` (NUMBER)
+   - `preferred_cust_flag` (BOOLEAN)
+   - `registration_time` (TIMESTAMP_LTZ)
 
-### Step 2: Verify Database and Table Structure
+### Step 2: Load Data
 
-Before loading data, ensure the following exist:
-- Database: `car_rental`
-- Schema: `public` (or your target schema)
-- Table: `customer_dim` with the following structure:
-  ```sql
-  CREATE TABLE customer_dim (
-      customer_key INTEGER AUTOINCREMENT PRIMARY KEY,
-      customer_id STRING UNIQUE NOT NULL,
-      name STRING,
-      email STRING,
-      phone STRING,
-      effective_date TIMESTAMP,
-      end_date TIMESTAMP,
-      is_current BOOLEAN
-  );
-  ```
+After creating the table structure, load the customer data from `customer_10k_good_data.csv` using Snowflake's data loading capabilities:
 
-### Step 3: Prepare the Data File
+#### Option A: Using Snowflake Web UI
+1. Navigate to the `dims.customers` table
+2. Click "Load Data"
+3. Upload `customer_10k_good_data.csv`
+4. Configure the file format (CSV with header row)
+5. Execute the load
 
-The CSV file (`customer_10k_good_data.csv`) should have the following format:
-```csv
-customer_id,name,email,phone
-CUST001,John Doe,john.doe@example.com,123-456-7890
-CUST002,Jane Smith,jane.smith@example.com,123-456-7801
-...
-```
-
-**Important**: Ensure your CSV file:
-- Has a header row
-- Uses comma (`,`) as delimiter
-- Fields are properly quoted if they contain commas
-- No trailing commas
-
-### Step 4: Upload Data to Snowflake Stage
-
-#### Option A: Using SnowSQL PUT Command
+#### Option B: Using COPY INTO Command
 ```sql
-PUT file://customer_10k_good_data.csv @customer_data_stage AUTO_COMPRESS=TRUE;
+USE DATABASE gds_dev;
+USE SCHEMA dims;
+
+CREATE OR REPLACE FILE FORMAT csv_format
+  TYPE = 'CSV'
+  FIELD_DELIMITER = ','
+  RECORD_DELIMITER = '\n'
+  SKIP_HEADER = 1
+  FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+  TRIM_SPACE = FALSE
+  ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE
+  ESCAPE = 'NONE'
+  ESCAPE_UNENCLOSED_FIELD = '\134'
+  DATE_FORMAT = 'AUTO'
+  TIMESTAMP_FORMAT = 'AUTO'
+  NULL_IF = ('NULL', 'null', '')
+  COMMENT = 'CSV format for customer data';
+
+-- Create stage (if using internal stage)
+CREATE OR REPLACE STAGE customer_stage
+  FILE_FORMAT = csv_format;
+
+-- Upload file to stage (via SnowSQL or Web UI)
+-- Then load data
+COPY INTO dims.customers
+FROM @customer_stage/customer_10k_good_data.csv
+FILE_FORMAT = csv_format
+ON_ERROR = 'ABORT_STATEMENT';
 ```
 
-#### Option B: Using Snowflake Web UI
-1. Go to **Data** → **Databases** → **car_rental** → **Stages**
-2. Select `customer_data_stage`
-3. Click **Upload Files**
-4. Select your CSV file and upload
+### Step 3: Verify Data
 
-### Step 5: Execute the DML Script
-
-Run the SQL commands from `customer_data_dml.sql` in order:
-
-1. **Create File Format** (if needed)
-2. **Create Stage** (if using internal stage)
-3. **Upload File** to stage
-4. **Load Data** using COPY INTO command
-5. **Verify Data** with quality checks
-
-### Step 6: Verify the Load
-
-After loading, run these verification queries:
+After loading, verify the data was loaded correctly:
 
 ```sql
--- Check total record count
-SELECT COUNT(*) AS total_customers FROM customer_dim;
-
--- View sample records
-SELECT * FROM customer_dim LIMIT 10;
-
--- Check for duplicates
-SELECT customer_id, COUNT(*) 
-FROM customer_dim 
-GROUP BY customer_id 
-HAVING COUNT(*) > 1;
+SELECT COUNT(*) FROM dims.customers;
+SELECT * FROM dims.customers LIMIT 10;
 ```
 
-## 📊 Data Quality Checks
+## Data File Details
 
-The DML script includes several data quality checks:
+- **File**: `customer_10k_good_data.csv`
+- **Records**: ~10,000 customer records
+- **Format**: CSV with header row
+- **Encoding**: UTF-8
 
-1. **Record Count Verification**: Ensures all records were loaded
-2. **Duplicate Detection**: Identifies duplicate customer IDs
-3. **NULL Value Checks**: Validates required fields are not NULL
-4. **Email Format Validation**: Basic email format verification
-5. **Summary Statistics**: Provides overview of loaded data
+## Database Schema
 
-## 🔧 Configuration
+- **Database**: `gds_dev`
+- **Schema**: `dims`
+- **Table**: `customers`
 
-### File Format Settings
+## Notes
 
-The default CSV file format configuration:
-- **Field Delimiter**: Comma (`,`)
-- **Record Delimiter**: Newline (`\n`)
-- **Header Row**: Skipped (first row)
-- **Field Enclosure**: Double quotes (`"`)
-- **Error Handling**: Continue on error
+- This is a separate customer data loading project specifically for Snowflake
+- The SQL scripts are designed to be executed in sequence
+- Ensure you have the necessary permissions before executing the scripts
+- The data file contains sample customer data for testing and development purposes
 
-### Stage Configuration
+## Support
 
-- **Stage Type**: Internal stage (for local file uploads)
-- **Compression**: Auto-compress on upload
-- **File Format**: Uses `csv_customer_format`
+For issues or questions related to this project, please refer to the Snowflake documentation or contact your database administrator.
 
-## 📝 Usage Examples
+## License
 
-### Basic Load
-```sql
--- Execute the full DML script
--- This will create stages, upload files, and load data
-```
-
-### Incremental Load
-```sql
--- For incremental loads, modify the COPY INTO command to:
-COPY INTO customer_dim (...)
-FROM @customer_data_stage/customer_10k_good_data.csv.gz
-FILE_FORMAT = csv_customer_format
-ON_ERROR = 'CONTINUE'
-FORCE = FALSE;
-```
-
-### Load from External Stage (GCS/S3)
-```sql
--- If using external stage configured in snowflake_dwh_setup.sql
-COPY INTO customer_dim (...)
-FROM @car_rental_data_stg/customer_10k_good_data.csv
-FILE_FORMAT = csv_customer_format;
-```
-
-## ⚠️ Troubleshooting
-
-### Common Issues
-
-1. **File Not Found in Stage**
-   - Verify file was uploaded: `LIST @customer_data_stage;`
-   - Check file name matches exactly (case-sensitive)
-
-2. **Column Mismatch Errors**
-   - Verify CSV structure matches table schema
-   - Check for extra/missing columns
-
-3. **Permission Errors**
-   - Ensure you have USAGE privilege on database and schema
-   - Verify you have INSERT privilege on `customer_dim` table
-
-4. **Data Type Errors**
-   - Check phone numbers are in correct format
-   - Verify email addresses are valid
-   - Ensure customer_id is unique
-
-## 🔄 Best Practices
-
-1. **Always backup** before bulk loads
-2. **Test with small sample** before full load
-3. **Monitor load performance** using Snowflake query history
-4. **Validate data quality** after each load
-5. **Use transactions** for critical loads
-6. **Document any data transformations** applied
-
-## 📚 Related Resources
-
-- [Snowflake COPY INTO Documentation](https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html)
-- [Snowflake Stages Documentation](https://docs.snowflake.com/en/user-guide/data-load-local-file-system-create-stage.html)
-- [Snowflake File Formats](https://docs.snowflake.com/en/sql-reference/sql/create-file-format.html)
-
-## 📄 License
-
-This repository is part of the Car Rental Batch Ingestion Project.
-
-## 👥 Contributing
-
-When adding new customer data files:
-1. Follow the CSV format specified above
-2. Update the DML script if schema changes
-3. Test with sample data before production loads
-4. Document any changes in this README
-
----
-
-**Last Updated**: January 2026  
-**Snowflake Version**: Compatible with Snowflake Standard Edition and above
+This project is for internal use and data loading purposes.
 

@@ -10,13 +10,15 @@ This project provides a complete workflow for:
 - Creating the necessary Snowflake database and schema structure
 - Defining the customer dimension table schema
 - Loading customer data from CSV files into Snowflake
+- Setting up Snowpipe for automated data ingestion from Google Cloud Storage (GCS)
 
 ## Repository Structure
 
 ```
 customer-data-dml/
 ├── README.md                      # Project documentation
-├── steps.sql                      # Snowflake DDL and setup scripts
+├── steps.sql                      # Snowflake DDL and setup scripts for customer data
+├── snowpipe_testing.sql           # Snowpipe setup for automated data ingestion from GCS
 └── customer_10k_good_data.csv     # Customer data file (10,000 records)
 ```
 
@@ -115,6 +117,38 @@ SELECT * FROM dims.customers LIMIT 10;
 - **Database**: `gds_dev`
 - **Schema**: `dims`
 - **Table**: `customers`
+
+## Snowpipe Setup
+
+The `snowpipe_testing.sql` file contains scripts for setting up automated data ingestion using Snowpipe with Google Cloud Storage (GCS). This includes:
+
+- **Storage Integration**: Configures secure access to GCS buckets
+- **External Stage**: Creates a stage pointing to GCS bucket location
+- **Notification Integration**: Sets up Pub/Sub integration for event-driven ingestion
+- **Snowpipe**: Creates an automated pipe that loads data from GCS to Snowflake tables
+
+### Snowpipe Components
+
+1. **Storage Integration** (`gcs_bucket_read_int`): Enables secure access to GCS bucket `snowpipe_raw_data_ds`
+2. **External Stage** (`snowpipe_stage`): References the GCS bucket location
+3. **Notification Integration** (`notification_from_pubsub_int`): Connects to GCP Pub/Sub for event notifications
+4. **Snowpipe** (`gcs_to_snowflake_pipe`): Automatically ingests CSV files from GCS into `orders_data_lz` table
+
+### Prerequisites for Snowpipe
+
+- Google Cloud Storage bucket with appropriate permissions
+- GCP Pub/Sub topic and subscription configured
+- Service accounts with required IAM roles:
+  - Storage: `storage.buckets.list`, `storage.objects.get`, `storage.objects.list`
+  - Pub/Sub: `Pub/Sub Subscriber` role
+- Snowflake ACCOUNTADMIN role for creating integrations
+
+### Usage
+
+1. Execute `snowpipe_testing.sql` in Snowflake (requires ACCOUNTADMIN role)
+2. Configure GCS bucket notifications to publish to Pub/Sub topic
+3. Upload CSV files to the GCS bucket
+4. Snowpipe will automatically detect and load new files into the `orders_data_lz` table
 
 ## Notes
 
